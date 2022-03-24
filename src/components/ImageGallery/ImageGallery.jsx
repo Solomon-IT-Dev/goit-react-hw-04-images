@@ -15,5 +15,5 @@ export default function ImageGallery({ imagesSet, onClick, scrollRef }) {
 ImageGallery.propTypes = {
   imagesSet: PropTypes.array.isRequired,
   onClick: PropTypes.func.isRequired,
-  scrollRef: PropTypes.func.isRequired,
+  // scrollRef: PropTypes.func.isRequired,
 };

@@ -1,4 +1,5 @@
-import React, { Component, useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import usePrevious from 'hooks/usePrevious';
 import { toast } from 'react-toastify';
 import findImages from 'services/imageFinderApi';
 import Searchbar from 'components/Searchbar';
@@ -19,152 +20,138 @@ const Status = {
   REJECTED: 'rejected',
 };
 
-class App extends Component {
-  state = {
-    searchQuery: '',
-    imagesSet: [],
-    page: 1,
-    totalImages: 0,
-    largeImageURL: '',
-    showModal: false,
-    status: Status.IDLE,
-  };
+export default function App() {
+  const [searchQuery, setSearchQuery] = useState('');
+  const [imagesSet, setImagesSet] = useState([]);
+  const [page, setPage] = useState(1);
+  const [totalImages, setTotalImages] = useState(0);
+  const [largeImageURL, setLargeImageURL] = useState('');
+  const [showModal, setShowModal] = useState(false);
+  const [status, setStatus] = useState(Status.IDLE);
 
-  componentDidUpdate(prevProps, prevState) {
-    const prevQuery = prevState.searchQuery;
-    const nextQuery = this.state.searchQuery;
-    const prevPage = prevState.page;
-    const nextPage = this.state.page;
+  const prevSearchQuery = usePrevious(searchQuery);
+  const galleryElem = useRef(null);
 
-    if (prevQuery !== nextQuery || prevPage !== nextPage) {
-      findImages(nextQuery, nextPage)
-        .then(({ hits, totalHits }) => {
-          if (totalHits === 0) {
-            this.rejectedStatusHandler();
-            this.showIncorrectQuery(nextQuery);
-            return;
-          }
-
-          if (nextPage === 1) {
-            this.setState({
-              imagesSet: hits,
-              totalImages: totalHits,
-              status: Status.RESOLVED,
-            });
-            this.showSearchResult(totalHits);
-          } else {
-            this.setState(prevState => ({
-              imagesSet: [...prevState.imagesSet, ...hits],
-              status: Status.RESOLVED,
-            }));
-            this.makeSmoothScroll();
-          }
-        })
-        .catch(error => {
-          console.log(error);
-          this.rejectedStatusHandler();
-          return this.showQueryError(error);
-        });
+  useEffect(() => {
+    if (!searchQuery) {
+      return;
     }
-  }
 
-  rejectedStatusHandler = () => {
-    this.setState({ status: Status.REJECTED });
+    findImages(searchQuery, page)
+      .then(({ hits, totalHits }) => {
+        if (totalHits === 0) {
+          rejectedStatusHandler();
+          showIncorrectQuery(searchQuery);
+          return;
+        }
+
+        if (page === 1) {
+          setImagesSet(hits);
+          setTotalImages(totalHits);
+          setStatus(Status.RESOLVED);
+          showSearchResult(totalHits);
+        } else {
+          setImagesSet(prevImagesSet => [...prevImagesSet, ...hits]);
+          setStatus(Status.RESOLVED);
+          makeSmoothScroll();
+        }
+      })
+      .catch(error => {
+        console.log(error);
+        rejectedStatusHandler();
+        return showQueryError(error);
+      });
+  }, [searchQuery, page]);
+
+  const rejectedStatusHandler = () => {
+    setStatus(Status.REJECTED);
     setTimeout(() => {
-      this.setState({ status: Status.IDLE });
+      setStatus(Status.IDLE);
     }, 2500);
   };
 
-  showSearchResult = totalImages => {
+  const showSearchResult = totalImages => {
     toast.success(`Hooray! We found ${totalImages} images.`);
   };
 
-  showIncorrectQuery = searchQuery => {
+  const showIncorrectQuery = searchQuery => {
     toast.error(
       `Sorry, there are no images matching your query: "${searchQuery}". Please try to search something else.`
     );
   };
 
-  showQueryError = error => {
+  const showQueryError = error => {
     toast.error(`You caught the following error: ${error.message}.`);
   };
 
-  onFormSubmit = searchQuery => {
-    this.setState({
-      searchQuery,
-      imagesSet: [],
-      page: 1,
-      status: Status.PENDING,
-    });
+  const galleryReset = () => {
+    setImagesSet([]);
+    setPage(1);
   };
 
-  makeSmoothScroll = () => {
-    const cardHeight = this.galleryElem.firstElementChild.clientHeight;
-    window.scrollBy({ top: cardHeight * 1.97, behavior: 'smooth' });
+  const onFormSubmit = searchQuery => {
+    if (prevSearchQuery === searchQuery) {
+      return;
+    }
+
+    setSearchQuery(searchQuery);
+    galleryReset();
+    setStatus(Status.PENDING);
   };
 
-  onLoadBtnClick = () => {
-    const { totalImages, imagesSet } = this.state;
-
+  const onLoadBtnClick = () => {
     if (totalImages > imagesSet.length) {
-      this.setState(prevState => ({ page: prevState.page + 1 }));
+      setPage(prevPage => prevPage + 1);
     }
   };
 
-  toggleModal = largeImageURL => {
-    this.setState(({ showModal }) => ({
-      showModal: !showModal,
-      largeImageURL,
-    }));
+  const makeSmoothScroll = () => {
+    const cardHeight = galleryElem.current.firstElementChild.clientHeight;
+    window.scrollBy({ top: cardHeight * 1.97, behavior: 'smooth' });
   };
 
-  render() {
-    const {
-      searchQuery,
-      imagesSet,
-      totalImages,
-      largeImageURL,
-      showModal,
-      status,
-    } = this.state;
+  const toggleModal = largeImageURL => {
+    setShowModal(showModal => !showModal);
+    setLargeImageURL(largeImageURL);
+  };
 
-    return (
-      <AppWrapper>
-        <Searchbar onSubmit={this.onFormSubmit} />
-        {status === Status.IDLE && (
-          <FrontNotification text="Type your image request in searchbar and get an awesome collection of pictures." />
-        )}
-        {status === Status.PENDING && <Loader />}
-        {status === Status.RESOLVED && (
-          <>
-            <ImageGallery
-              imagesSet={imagesSet}
-              onClick={this.toggleModal}
-              scrollRef={galleryList => {
-                this.galleryElem = galleryList;
-              }}
+  return (
+    <AppWrapper>
+      <Searchbar onSubmit={onFormSubmit} />
+
+      {status === Status.IDLE && (
+        <FrontNotification text="Type your image request in searchbar and get an awesome collection of pictures." />
+      )}
+
+      {status === Status.PENDING && <Loader />}
+
+      {status === Status.RESOLVED && (
+        <>
+          <ImageGallery
+            imagesSet={imagesSet}
+            onClick={toggleModal}
+            scrollRef={galleryElem}
+          />
+
+          {totalImages > imagesSet.length && (
+            <Button onClick={onLoadBtnClick} />
+          )}
+
+          {showModal && (
+            <Modal
+              largeImageURL={largeImageURL}
+              alt={searchQuery}
+              onClose={toggleModal}
             />
+          )}
+        </>
+      )}
 
-            {totalImages > imagesSet.length && (
-              <Button onClick={this.onLoadBtnClick} />
-            )}
+      {status === Status.REJECTED && (
+        <FrontNotification text="Oops! Something went wrong." />
+      )}
 
-            {showModal && (
-              <Modal
-                largeImageURL={largeImageURL}
-                alt={searchQuery}
-                onClose={this.toggleModal}
-              />
-            )}
-          </>
-        )}
-        {status === Status.REJECTED && (
-          <FrontNotification text="Oops! Something went wrong." />
-        )}
-        <ToastContainer autoClose={4000} />
-      </AppWrapper>
-    );
-  }
+      <ToastContainer autoClose={4000} />
+    </AppWrapper>
+  );
 }
-
-export default App;

@@ -10,10 +10,9 @@ const modalRoot = document.getElementById('modal-root');
 export default function Modal({ largeImageURL, alt, onClose }) {
   useEffect(() => {
     window.addEventListener('keydown', onKeyDown);
-    console.log('first render');
+
     return () => {
       window.removeEventListener('keydown', onKeyDown);
-      console.log('last render');
     };
   });
 
