@@ -40,4 +40,4 @@ export const CloseButton = styled.button`
 
 export const LargeImg = styled.img`
   max-height: 675px;
-`
+`;
